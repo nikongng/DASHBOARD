@@ -619,6 +619,7 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
         import { getFirestore, collection, onSnapshot, updateDoc, doc, deleteDoc, addDoc, serverTimestamp, query, where, orderBy } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
         import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut, getIdTokenResult, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js";
+        import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
 
         const firebaseConfig = {
             apiKey: "AIzaSyDX-hHwrPsIfY4WGrZ2wgXeAZf5KWe18Ls",
@@ -634,6 +635,11 @@
         const db = getFirestore(app);
         const auth = getAuth();
         const provider = new GoogleAuthProvider();
+        
+        // Supabase client (optional) — replace with your values or set globally before loading this page
+        const SUPABASE_URL = window.SUPABASE_URL || '';
+        const SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY || '';
+        const supabase = (SUPABASE_URL && SUPABASE_ANON_KEY) ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
 
         // Base URL for backend functions: use local emulator when running on localhost
         const FUNCTIONS_BASE = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
@@ -719,6 +725,7 @@
                 <button id="emailLoginBtn" class="theme-toggle">Connexion (email)</button>
                 <button id="requestAdminBtn" class="theme-toggle" style="display:none">Demander admin</button>
                 <button id="manageRequestsBtn" class="theme-toggle" style="display:none">Gérer demandes</button>
+                <button id="debugClaimsBtn" class="theme-toggle" title="Afficher les claims du token">Debug claims</button>
                 <span id="userLabel" style="font-weight:500;color:#495057"></span>
             `;
             container.appendChild(authDiv);
@@ -727,6 +734,14 @@
             document.getElementById('requestAdminBtn').addEventListener('click', requestAdmin);
             document.getElementById('emailLoginBtn').addEventListener('click', openLoginModal);
             document.getElementById('manageRequestsBtn').addEventListener('click', openAdminRequestsModal);
+            document.getElementById('debugClaimsBtn').addEventListener('click', async () => {
+                const u = auth.currentUser;
+                if (!u) { showToast('Non connecté', true); return; }
+                try {
+                    const idRes = await getIdTokenResult(u);
+                    alert('Token claims:\n' + JSON.stringify(idRes.claims, null, 2));
+                } catch (e) { showToast('Erreur fetching claims: ' + e.message, true); }
+            });
         }
 
         onAuthStateChanged(auth, async (user) => {
@@ -810,7 +825,9 @@
                     return;
                 }
                 try {
-                    await signInWithEmailAndPassword(auth, email, password);
+                    const cred = await signInWithEmailAndPassword(auth, email, password);
+                    // force token refresh to ensure custom claims are available
+                    try { await auth.currentUser.getIdToken(true); } catch (_) {}
                     showToast('Connecté');
                     closeLoginModal();
                 } catch (e) {
@@ -1024,6 +1041,16 @@
             userCard.setAttribute('data-date', user.lastUpdated ? new Date(user.lastUpdated.seconds * 1000).getTime() : 0);
             userCard.setAttribute('data-status', user.isCertified ? 'certified' : 'pending');
             userCard.onclick = () => openModal(user);
+            // Attempt to show selfie/identity links if present in user document
+            const selfieUrl = user.selfieUrl || user.selfie || user.photoUrl || '';
+            const identityUrl = user.identityUrl || user.identity || '';
+
+            let filesHtml = '';
+            if (selfieUrl) filesHtml += `<p><strong>Selfie:</strong> <img src="${selfieUrl}" alt="Selfie" style="width:80px;height:80px;border-radius:8px;object-fit:cover;margin-top:6px;"/></p>`;
+            else filesHtml += `<p><strong>Selfie:</strong> <small>Aucun</small></p>`;
+            if (identityUrl) filesHtml += `<p><strong>Document:</strong> <a href="${identityUrl}" target="_blank">Voir PDF</a></p>`;
+            else filesHtml += `<p><strong>Document:</strong> <small>Aucun</small></p>`;
+
             userCard.innerHTML = `
                 <div style="display: flex; align-items: center;">
                     <img src="${user.photoUrl || 'https://via.placeholder.com/50'}" alt="Avatar" class="avatar">
@@ -1043,6 +1070,7 @@
                             : `<button data-userid="${collectionName}_${userId}" data-original="Certifier" onclick="event.stopPropagation(); certifyUser('${collectionName}', '${userId}')">Certifier</button>`
                         }
                         <button onclick="event.stopPropagation(); deleteUser('${collectionName}', '${userId}')">Supprimer</button>
+                        <div style="margin-top:10px;">${filesHtml}</div>
                     </div>
                 </div>
             `;
