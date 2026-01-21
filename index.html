@@ -1064,9 +1064,11 @@
             };
             const selfieUrl = sanitize(rawSelfie || maybe(docs, 'selfie', 'selfieUrl'));
             const identityUrl = sanitize(rawIdentity || maybe(docs, 'identityPdf', 'identity'));
+            const encSelfieEarly = selfieUrl ? encodeURIComponent(selfieUrl) : '';
+            const fullnameEarly = encodeURIComponent(`${user.firstName || ''} ${user.lastName || ''}`.trim());
 
             let filesHtml = '';
-            if (selfieUrl) filesHtml += `<p><strong>Selfie:</strong> <img src="${selfieUrl}" alt="Selfie" style="width:80px;height:80px;border-radius:8px;object-fit:cover;margin-top:6px;"/></p>`;
+            if (selfieUrl) filesHtml += `<p><strong>Selfie:</strong> <img src="${selfieUrl}" alt="Selfie" style="width:80px;height:80px;border-radius:8px;object-fit:cover;margin-top:6px;cursor:pointer;" onclick="(function(e){e=e||window.event; if(e && e.stopPropagation) e.stopPropagation(); try{viewDocuments('${encSelfieEarly}','', '${fullnameEarly}');}catch(_){console.error('viewDocuments error', _);} })(event)"/></p>`;
             else filesHtml += `<p><strong>Selfie:</strong> <small>Aucun</small></p>`;
             if (identityUrl) filesHtml += `<p><strong>Document:</strong> <a href="${identityUrl}" target="_blank" rel="noopener">Voir fichier</a></p>`;
             else filesHtml += `<p><strong>Document:</strong> <small>Aucun</small></p>`;
