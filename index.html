@@ -1035,6 +1035,7 @@
         }
 
         function renderUserCard(container, user, collectionName, userId) {
+            console.debug('renderUserCard', collectionName, userId, user);
             const userCard = document.createElement('div');
             userCard.className = 'user-card';
             userCard.setAttribute('data-name', `${user.firstName || ''} ${user.lastName || ''}`.toLowerCase());
@@ -1042,14 +1043,45 @@
             userCard.setAttribute('data-status', user.isCertified ? 'certified' : 'pending');
             userCard.onclick = () => openModal(user);
             // Attempt to show selfie/identity links if present in user document
-            const selfieUrl = user.selfieUrl || user.selfie || user.photoUrl || '';
-            const identityUrl = user.identityUrl || user.identity || '';
+            // Support nested `documents` structure written by the registration flow and tolerate variant key names
+            const docs = (user.documents && typeof user.documents === 'object') ? user.documents : {};
+            const maybe = (obj, ...keys) => {
+                for (const k of keys) {
+                    if (!obj) continue;
+                    if (Object.prototype.hasOwnProperty.call(obj, k) && obj[k]) return obj[k];
+                    const lk = k.toLowerCase();
+                    const foundKey = Object.keys(obj).find(x => x.toLowerCase() === lk);
+                    if (foundKey && obj[foundKey]) return obj[foundKey];
+                }
+                return null;
+            };
+
+            const rawSelfie = maybe(user, 'selfieUrl', 'selfie', 'photoUrl', 'photo');
+            const rawIdentity = maybe(user, 'identityUrl', 'identityPdf', 'identity', 'document', 'identity_url');
+            const sanitize = (u) => {
+                if (!u) return '';
+                try { return String(u).trim().replace(/\s+/g, ''); } catch (_) { return '';} 
+            };
+            const selfieUrl = sanitize(rawSelfie || maybe(docs, 'selfie', 'selfieUrl'));
+            const identityUrl = sanitize(rawIdentity || maybe(docs, 'identityPdf', 'identity'));
 
             let filesHtml = '';
             if (selfieUrl) filesHtml += `<p><strong>Selfie:</strong> <img src="${selfieUrl}" alt="Selfie" style="width:80px;height:80px;border-radius:8px;object-fit:cover;margin-top:6px;"/></p>`;
             else filesHtml += `<p><strong>Selfie:</strong> <small>Aucun</small></p>`;
-            if (identityUrl) filesHtml += `<p><strong>Document:</strong> <a href="${identityUrl}" target="_blank">Voir PDF</a></p>`;
+            if (identityUrl) filesHtml += `<p><strong>Document:</strong> <a href="${identityUrl}" target="_blank" rel="noopener">Voir fichier</a></p>`;
             else filesHtml += `<p><strong>Document:</strong> <small>Aucun</small></p>`;
+
+            // Provide a "Visualiser" button when upload status is completed (tolerate 'complete' or 'completed')
+            const statusOk = user.uploadStatus && typeof user.uploadStatus === 'string' && user.uploadStatus.toLowerCase().startsWith('comp');
+            let viewBtn = '';
+            if (statusOk && (selfieUrl || identityUrl)) {
+                const encSelfie = selfieUrl ? encodeURIComponent(selfieUrl) : '';
+                const encIdentity = identityUrl ? encodeURIComponent(identityUrl) : '';
+                const fullname = encodeURIComponent(`${user.firstName || ''} ${user.lastName || ''}`.trim());
+                viewBtn = `<div style="margin-top:8px;">` +
+                          `<button onclick="event.stopPropagation(); viewDocuments('${encSelfie}','${encIdentity}','${fullname}')">Visualiser documents</button>` +
+                          `</div>`;
+            }
 
             userCard.innerHTML = `
                 <div style="display: flex; align-items: center;">
@@ -1064,17 +1096,40 @@
                         <p><strong>Adresse:</strong> ${user.address || ''}</p>
                         <p><strong>Genre:</strong> ${user.genre || 'N/A'}</p>
                         <p><strong>Date de naissance:</strong> ${user.birthDate ? new Date(user.birthDate).toLocaleDateString() : 'N/A'}</p>
-                        <p><strong>Statut upload:</strong> <span class="${user.uploadStatus === 'complete' ? 'status-complete' : 'status-error'}">${user.uploadStatus || 'N/A'}</span></p>
+                        <p><strong>Statut upload:</strong> <span class="${(user.uploadStatus && typeof user.uploadStatus === 'string' && user.uploadStatus.toLowerCase().startsWith('comp')) ? 'status-complete' : 'status-error'}">${user.uploadStatus || 'N/A'}</span></p>
                         ${user.isCertified === true
                             ? `<button data-userid="${collectionName}_${userId}" data-original="Décertifier" onclick="event.stopPropagation(); uncertifyUser('${collectionName}', '${userId}')">Décertifier</button>`
                             : `<button data-userid="${collectionName}_${userId}" data-original="Certifier" onclick="event.stopPropagation(); certifyUser('${collectionName}', '${userId}')">Certifier</button>`
                         }
                         <button onclick="event.stopPropagation(); deleteUser('${collectionName}', '${userId}')">Supprimer</button>
-                        <div style="margin-top:10px;">${filesHtml}</div>
+                        <div style="margin-top:10px;">${filesHtml}${viewBtn}</div>
                     </div>
                 </div>
             `;
             container.appendChild(userCard);
+        }
+
+        function viewDocuments(encSelfie, encIdentity, encName) {
+            const selfie = encSelfie ? decodeURIComponent(encSelfie) : '';
+            const identity = encIdentity ? decodeURIComponent(encIdentity) : '';
+            const name = encName ? decodeURIComponent(encName) : '';
+            let html = `<h3>Documents de ${name || 'utilisateur'}</h3>`;
+            if (selfie) {
+                html += `<div style="display:flex;gap:12px;align-items:center;margin-bottom:12px;"><img src="${selfie}" style="max-width:220px;border-radius:8px;object-fit:cover;" alt="selfie"/></div>`;
+            }
+            if (identity) {
+                // If the identity link ends with .pdf or content-type suggests pdf, embed iframe, otherwise provide link
+                const lower = identity.toLowerCase();
+                if (lower.endsWith('.pdf')) {
+                    html += `<div style="height:500px;"><iframe src="${identity}" style="width:100%;height:100%;border:0;border-radius:8px;"></iframe></div>`;
+                } else {
+                    html += `<p><a href="${identity}" target="_blank" rel="noopener">Ouvrir le document</a></p>`;
+                }
+            }
+            if (!selfie && !identity) html += `<p><em>Aucun document disponible</em></p>`;
+            document.getElementById('modal-name').textContent = name || 'Documents utilisateur';
+            document.getElementById('modal-details').innerHTML = html;
+            document.getElementById('userModal').style.display = 'block';
         }
 
         function renderPagination(paginationId, totalPages) {
@@ -1241,10 +1296,15 @@
         document.querySelector('.export-btn').insertAdjacentHTML('afterend', '<button onclick="exportPDF()">Exporter PDF</button>');
 
         function openModal(user) {
+            console.debug('openModal user:', user);
             document.getElementById('modal-name').textContent = `${user.firstName || ''} ${user.lastName || ''}`;
             let details = '';
             for (const [key, value] of Object.entries(user)) {
-                if (value) details += `<p><strong>${key}:</strong> ${value}</p>`;
+                let display = '';
+                if (value === null || value === undefined) display = '<em>vide</em>';
+                else if (typeof value === 'object') display = `<pre style="white-space:pre-wrap;max-height:200px;overflow:auto;">${JSON.stringify(value, null, 2)}</pre>`;
+                else display = String(value);
+                details += `<p><strong>${key}:</strong> ${display}</p>`;
             }
             document.getElementById('modal-details').innerHTML = details;
             document.getElementById('userModal').style.display = 'block';
