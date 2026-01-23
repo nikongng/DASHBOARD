@@ -1094,6 +1094,17 @@
                 container.innerHTML = '<div class="skeleton"></div>'.repeat(6);
             }
         }
+        function filterUsers() {
+    const activeTab = document.querySelector('.tabcontent[style*="display: block"]');
+    if (!activeTab) return;
+
+    const container = activeTab.querySelector('.user-grid');
+    if (!container) return;
+
+    currentPage = 1;
+    renderUsers(container.id);
+}
+
 
         function renderUsers(containerId) {
             const container = document.getElementById(containerId);
