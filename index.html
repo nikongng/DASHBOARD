@@ -1332,6 +1332,7 @@
             const name = (p.name || p.displayName || 'Prestataire').toString();
             const role = (p.role || p.title || '').toString();
             const phone = (p.phone || p.phoneNumber || '').toString();
+            const email = (p.email || '').toString();
             const city = (p.cityLabel || p.city || '').toString();
             const price = (p.priceLabel || p.price || '').toString();
             const rating = (p.rating ?? '').toString();
@@ -1361,6 +1362,7 @@
                         </h4>
                         ${role ? `<p><strong>Role:</strong> ${role}</p>` : ''}
                         ${phone ? `<p><strong>Telephone:</strong> ${phone}</p>` : ''}
+                        ${email ? `<p><strong>Email:</strong> ${email}</p>` : ''}
                         ${city ? `<p><strong>Ville:</strong> ${city}</p>` : ''}
                         ${price ? `<p><strong>Prix:</strong> ${price}</p>` : ''}
                         ${(rating || reviews) ? `<p><strong>Note:</strong> ${rating || 'N/A'} ${reviews ? `(${reviews})` : ''}</p>` : ''}
