@@ -1241,12 +1241,39 @@
             }
         };
 
+        window.setAdultPin = async function(collectionName, userId) {
+            const raw = prompt('Définir un PIN adulte (4 chiffres)');
+            if (raw === null) return;
+            const pin = String(raw).trim();
+            if (!/^\d{4}$/.test(pin)) {
+                showToast('PIN invalide. Utilisez 4 chiffres.', true);
+                return;
+            }
+            if (!confirm('Confirmer le nouveau PIN adulte ?')) return;
+            updateUserCardButton(collectionName, userId, true);
+            try {
+                await updateDoc(doc(db, collectionName, userId), {
+                    adultPin: pin,
+                    adultPinHash: null,
+                    adultPinUpdatedAt: serverTimestamp(),
+                    adultPinSetBy: auth.currentUser ? auth.currentUser.uid : null,
+                });
+                showToast('PIN adulte mis à jour.');
+            } catch (error) {
+                showToast('Erreur mise à jour PIN: ' + error.message, true);
+            }
+            updateUserCardButton(collectionName, userId, false);
+        };
+
         function updateUserCardButton(collectionName, userId, loading) {
             // Buttons are rendered with data-collection + data-userid (not concatenated).
             const btns = document.querySelectorAll(`button[data-collection="${collectionName}"][data-userid="${userId}"]`);
             btns.forEach(btn => {
+                if (!btn.getAttribute('data-original')) {
+                    btn.setAttribute('data-original', btn.textContent || '');
+                }
                 btn.disabled = loading;
-                btn.textContent = loading ? 'Chargement...' : (btn.getAttribute('data-original') || btn.textContent);
+                btn.textContent = loading ? 'Chargement...' : (btn.getAttribute('data-original') || '');
             });
         }
 
@@ -2085,6 +2112,7 @@
                 : `<button class="certify-btn" data-collection="${collectionName}" data-userid="${userId}" data-original="Certifier">Certifier</button>`;
 
             const deleteBtnHtml = `<button class="delete-btn" data-collection="${collectionName}" data-userid="${userId}">Supprimer</button>`;
+            const pinBtnHtml = `<button class="adult-pin-btn" data-collection="${collectionName}" data-userid="${userId}" data-original="PIN adulte">PIN adulte</button>`;
 
             userCard.innerHTML = `
                 <div style="display: flex; align-items: center;">
@@ -2102,6 +2130,7 @@
                         <p><strong>Statut upload:</strong> <span class="${statusOk ? 'status-complete' : 'status-error'}">${user.uploadStatus || 'N/A'}</span></p>
                         ${certifyBtnHtml}
                         ${deleteBtnHtml}
+                        ${pinBtnHtml}
                         <div style="margin-top:10px;">${filesHtml}${viewBtnHtml}</div>
                     </div>
                 </div>
@@ -2144,6 +2173,13 @@
                 deleteBtn.addEventListener('click', (e) => {
                     e.stopPropagation();
                     deleteUser(deleteBtn.dataset.collection, deleteBtn.dataset.userid);
+                });
+            }
+            const pinBtn = userCard.querySelector('.adult-pin-btn');
+            if (pinBtn) {
+                pinBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    setAdultPin(pinBtn.dataset.collection, pinBtn.dataset.userid);
                 });
             }
 
